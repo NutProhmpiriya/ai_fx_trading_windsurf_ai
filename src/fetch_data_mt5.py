@@ -11,7 +11,7 @@ def initialize_mt5():
         return False
     return True
 
-def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M5):
+def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M5, year=2023):
     """
     Fetch historical data from MT5 for 2023-2024
     """
@@ -22,8 +22,8 @@ def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M5):
     timezone = pytz.timezone("Etc/UTC")
     
     # Define time period
-    end_date = datetime.now(timezone)
-    start_date = datetime(2023, 1, 1, tzinfo=timezone)
+    end_date = datetime(year, 12, 31, tzinfo=timezone)
+    start_date = datetime(year, 1, 1, tzinfo=timezone)
     
     # Fetch the data
     rates = mt5.copy_rates_range(symbol, timeframe, start_date, end_date)
@@ -37,13 +37,13 @@ def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M5):
     df['time'] = pd.to_datetime(df['time'], unit='s')
     
     # Save to CSV
-    csv_filename = f"{symbol}_{timeframe}M_data.csv"
+    csv_filename = f"{symbol}_{timeframe}M_{year}_data.csv"
     df.to_csv('src/data/raw/' + csv_filename, index=False)
     print(f"Data saved to {csv_filename}")
     
     return df
 
-def create_candlestick_chart(df, symbol, timeframe):
+def create_candlestick_chart(df, symbol, timeframe, year):
     """
     Create interactive candlestick chart using Plotly
     """
@@ -64,7 +64,7 @@ def create_candlestick_chart(df, symbol, timeframe):
     )
     
     # Save the chart
-    html_filename = f"{symbol}_{timeframe}M_chart.html"
+    html_filename = f"{symbol}_{timeframe}M_{year}_chart.html"
     fig.write_html('src/data/raw/' + html_filename)
     print(f"Chart saved to src/data/raw/{html_filename}")
     
@@ -78,13 +78,14 @@ def main():
         # "GBPUSD", 
         "USDJPY"
     ]
+    year = 2023
     timeframe = mt5.TIMEFRAME_M5  # 1-hour timeframe
     
     for symbol in symbols:
         print(f"\nProcessing {symbol}...")
-        df = fetch_historical_data(symbol, timeframe)
+        df = fetch_historical_data(symbol, timeframe, year)
         if df is not None:
-            create_candlestick_chart(df, symbol, timeframe)
+            create_candlestick_chart(df, symbol, timeframe, year)
     
     mt5.shutdown()
 

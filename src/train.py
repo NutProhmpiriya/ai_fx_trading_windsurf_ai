@@ -5,6 +5,7 @@ from stable_baselines3.common.monitor import Monitor
 import os
 import pandas as pd
 from environment.forex_environment import ForexTradingEnv
+import torch
 
 def load_forex_data(data_path: str) -> pd.DataFrame:
     """
@@ -23,11 +24,32 @@ def load_forex_data(data_path: str) -> pd.DataFrame:
     return df
 
 def train_forex_model():
-    # Create logs directory if it doesn't exist
+    # Create necessary directories
+    os.makedirs("src/models", exist_ok=True)
+    os.makedirs("src/logs", exist_ok=True)
+    os.makedirs("src/data/raw", exist_ok=True)
+    
+    # Check for CUDA availability
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    
+    if device == "cuda":
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"Memory Usage:")
+        print(f"Allocated: {torch.cuda.memory_allocated(0)/1024**2:.2f}MB")
+        print(f"Cached: {torch.cuda.memory_reserved(0)/1024**2:.2f}MB")
     
     # Load and preprocess data
-    name_data = "USDJPY_16385_data.csv"
-    forex_data = load_forex_data('src/data/raw/{name_data}')
+    name_data = "USDJPY_5M_2023_data.csv"
+    data_path = 'src/data/raw/' + name_data
+    
+    if not os.path.exists(data_path):
+        print(f"Error: Data file not found at {data_path}")
+        return
+        
+    now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    name_model = "USDJPY_5M_2023_model_" + now
+    forex_data = load_forex_data(data_path)
     
     # Create and wrap the environment
     env = ForexTradingEnv(data=forex_data)
@@ -39,9 +61,6 @@ def train_forex_model():
     eval_env = Monitor(eval_env, "src/logs")
     eval_env = DummyVecEnv([lambda: eval_env])
     
-    now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-
-    name_model = f"model_{now}"
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
@@ -52,7 +71,7 @@ def train_forex_model():
         render=False
     )
     
-    # Initialize the agent
+    # Initialize the agent with GPU support
     model = PPO(
         "MlpPolicy",
         env,
@@ -71,11 +90,15 @@ def train_forex_model():
         sde_sample_freq=-1,
         target_kl=None,
         tensorboard_log="src/logs",
-        verbose=1
+        verbose=1,
+        device=device  # Set device for training
     )
+    
     num_bars = len(forex_data)
-    total_timesteps = num_bars*3
+    print(f"Number of bars: {num_bars}")
+    total_timesteps = num_bars
     print(f"Total timesteps: {total_timesteps}")
+    
     # Train the agent
     model.learn(
         total_timesteps=total_timesteps,
@@ -84,7 +107,6 @@ def train_forex_model():
     )
     
     # Save the final model
-
     model.save(f"src/models/{name_model}")
     print(f"Training completed. Model saved to models/{name_model}")
 
