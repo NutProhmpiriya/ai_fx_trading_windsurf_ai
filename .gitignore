@@ -45,7 +45,8 @@ logs/
 *.pkl
 *.pt
 Lib 
-Scripts
+Scriptstype nul > src/__init__.py
+type nul > src/environment/__init__.py
 Include
 
 # MT5 specific
