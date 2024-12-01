@@ -26,7 +26,8 @@ def train_forex_model():
     # Create logs directory if it doesn't exist
     
     # Load and preprocess data
-    forex_data = load_forex_data('src/data/raw/USDJPY_16385_data.csv')
+    name_data = "USDJPY_16385_data.csv"
+    forex_data = load_forex_data('src/data/raw/{name_data}')
     
     # Create and wrap the environment
     env = ForexTradingEnv(data=forex_data)
@@ -38,7 +39,8 @@ def train_forex_model():
     eval_env = Monitor(eval_env, "src/logs")
     eval_env = DummyVecEnv([lambda: eval_env])
     
-    now = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+    now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+
     name_model = f"model_{now}"
     # Create evaluation callback
     eval_callback = EvalCallback(

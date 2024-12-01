@@ -11,7 +11,7 @@ def initialize_mt5():
         return False
     return True
 
-def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_H1):
+def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M5):
     """
     Fetch historical data from MT5 for 2023-2024
     """
@@ -37,22 +37,24 @@ def fetch_historical_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_H1):
     df['time'] = pd.to_datetime(df['time'], unit='s')
     
     # Save to CSV
-    csv_filename = f"{symbol}_{timeframe}_data.csv"
-    df.to_csv(csv_filename, index=False)
+    csv_filename = f"{symbol}_{timeframe}M_data.csv"
+    df.to_csv('src/data/raw/' + csv_filename, index=False)
     print(f"Data saved to {csv_filename}")
     
     return df
 
-def create_candlestick_chart(df, symbol):
+def create_candlestick_chart(df, symbol, timeframe):
     """
     Create interactive candlestick chart using Plotly
     """
-    fig = go.Figure(data=[go.Candlestick(x=df['time'],
-                                        open=df['open'],
-                                        high=df['high'],
-                                        low=df['low'],
-                                        close=df['close'])])
-    
+    fig = go.Figure(data=[go.Candlestick(
+        x=df['time'],
+        open=df['open'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close']
+    )])
+
     # Update layout
     fig.update_layout(
         title=f'{symbol} Price Chart',
@@ -62,23 +64,27 @@ def create_candlestick_chart(df, symbol):
     )
     
     # Save the chart
-    html_filename = f"{symbol}_chart.html"
-    fig.write_html(html_filename)
-    print(f"Chart saved to {html_filename}")
+    html_filename = f"{symbol}_{timeframe}M_chart.html"
+    fig.write_html('src/data/raw/' + html_filename)
+    print(f"Chart saved to src/data/raw/{html_filename}")
     
     # Show the chart
     fig.show()
 
 def main():
     # List of symbols to fetch
-    symbols = ["EURUSD", "GBPUSD", "USDJPY"]
-    timeframe = mt5.TIMEFRAME_H1  # 1-hour timeframe
+    symbols = [
+        # "EURUSD", 
+        # "GBPUSD", 
+        "USDJPY"
+    ]
+    timeframe = mt5.TIMEFRAME_M5  # 1-hour timeframe
     
     for symbol in symbols:
         print(f"\nProcessing {symbol}...")
         df = fetch_historical_data(symbol, timeframe)
         if df is not None:
-            create_candlestick_chart(df, symbol)
+            create_candlestick_chart(df, symbol, timeframe)
     
     mt5.shutdown()
 
