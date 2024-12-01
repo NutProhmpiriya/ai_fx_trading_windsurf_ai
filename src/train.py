@@ -3,32 +3,48 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
 import os
+import pandas as pd
 from environment.forex_environment import ForexTradingEnv
 
-def train_forex_model(
-    data_path: str = "src/data/raw/USDJPY_16385_data.csv",
-    total_timesteps: int = 100000,
-    save_path: str = "models"
-):
+def load_forex_data(data_path: str) -> pd.DataFrame:
+    """
+    Load and preprocess forex data
+    """
+    # Read CSV file
+    df = pd.read_csv(data_path)
+    
+    # Convert time column to datetime
+    df['time'] = pd.to_datetime(df['time'])
+    
+    # Add volume if not present (common in Forex data)
+    if 'volume' not in df.columns:
+        df['volume'] = 1.0
+    
+    return df
+
+def train_forex_model():
     # Create logs directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs(save_path, exist_ok=True)
+    
+    # Load and preprocess data
+    forex_data = load_forex_data('src/data/raw/USDJPY_16385_data.csv')
     
     # Create and wrap the environment
-    env = ForexTradingEnv(data_path=data_path)
-    env = Monitor(env, "logs")
+    env = ForexTradingEnv(data=forex_data)
+    env = Monitor(env, "src/logs")
     env = DummyVecEnv([lambda: env])
     
     # Create evaluation environment
-    eval_env = ForexTradingEnv(data_path=data_path)
-    eval_env = Monitor(eval_env, "logs")
+    eval_env = ForexTradingEnv(data=forex_data)
+    eval_env = Monitor(eval_env, "src/logs")
     eval_env = DummyVecEnv([lambda: eval_env])
     
+    now = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+    name_model = f"model_{now}"
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=f"{save_path}/best_model",
-        log_path="logs",
+        best_model_save_path=f"src/models/{name_model}",
+        log_path="src/logs",
         eval_freq=10000,
         deterministic=True,
         render=False
@@ -52,10 +68,12 @@ def train_forex_model(
         use_sde=False,
         sde_sample_freq=-1,
         target_kl=None,
-        tensorboard_log="logs",
+        tensorboard_log="src/logs",
         verbose=1
     )
-    
+    num_bars = len(forex_data)
+    total_timesteps = num_bars*3
+    print(f"Total timesteps: {total_timesteps}")
     # Train the agent
     model.learn(
         total_timesteps=total_timesteps,
@@ -64,8 +82,9 @@ def train_forex_model(
     )
     
     # Save the final model
-    model.save(f"{save_path}/final_model")
-    print(f"Training completed. Model saved to {save_path}")
+
+    model.save(f"src/models/{name_model}")
+    print(f"Training completed. Model saved to models/{name_model}")
 
 if __name__ == "__main__":
     train_forex_model()

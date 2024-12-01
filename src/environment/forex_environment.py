@@ -5,12 +5,11 @@ import pandas as pd
 from typing import Tuple, Dict, Any
 
 class ForexTradingEnv(gym.Env):
-    def __init__(self, data_path: str, window_size: int = 60):
+    def __init__(self, data: pd.DataFrame, window_size: int = 60):
         super(ForexTradingEnv, self).__init__()
         
-        # Load and prepare data
-        self.data = pd.read_csv(data_path)
-        self.data['time'] = pd.to_datetime(self.data['time'])
+        # Store the data
+        self.data = data.copy()
         self.window_size = window_size
         
         # Calculate technical indicators
