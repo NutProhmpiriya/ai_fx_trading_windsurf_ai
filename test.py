@@ -137,11 +137,25 @@ def test_agent(model_path=None):
     if model_path is None:
         model_path = "models/USDJPY_5M_2023_model_20241202_163053/final_model.zip"
     
-    model_name = os.path.basename(model_path)
+    model_name = os.path.basename(os.path.dirname(model_path))
     
     # Check if model exists
     if not os.path.exists(model_path):
-        raise ValueError(f"Model not found at {model_path}")
+        # Try to find the most recent model
+        models_dir = "models"
+        if os.path.exists(models_dir):
+            model_dirs = [d for d in os.listdir(models_dir) if d.startswith("USDJPY_5M_2023_model_")]
+            if model_dirs:
+                latest_model = max(model_dirs)
+                model_path = os.path.join(models_dir, latest_model, "final_model.zip")
+                if os.path.exists(model_path):
+                    print(f"Using latest model: {model_path}")
+                else:
+                    raise ValueError(f"Model not found at {model_path}")
+            else:
+                raise ValueError("No model directories found")
+        else:
+            raise ValueError(f"Model not found at {model_path}")
     
     # Load test data
     data_path = 'data/raw/USDJPY_5M_2024_data.csv'
@@ -206,20 +220,108 @@ def test_agent(model_path=None):
     total_time = time.time() - start_time
     print(f"\nBacktest completed in {total_time/60:.1f} minutes")
     print(f"Total steps processed: {step_count:,}")
+    
+    # Check if all steps were completed
+    if step_count < total_steps:
+        print(f"\n⚠️ WARNING: Model testing failed - Incomplete steps!")
+        print(f"Expected steps: {total_steps:,}")
+        print(f"Completed steps: {step_count:,}")
+        print(f"Missing steps: {total_steps - step_count:,}")
+        print("Test terminated due to incomplete execution.")
+        return False
+        
     print(f"Initial Balance: 10,000.00")
     print(f"Final Balance: {env.balance:.2f}")
     print(f"Total Return: {((env.balance/10000)-1)*100:.2f}%")
-    print(f"Number of Trades: {len(trades):,}")
     
     if trades:
+        trades_df['profit'] = trades_df['balance'].diff()
+        trades_df['month'] = trades_df['time'].dt.strftime('%Y-%m')
+        
+        # Overall statistics
+        total_trades = len(trades)
         profitable_trades = len([t for t in trades if t > 0])
+        losing_trades = len([t for t in trades if t < 0])
+        
+        print("\n=== Overall Trading Statistics ===")
+        print(f"Total Number of Trades: {total_trades:,}")
+        print(f"Profitable Trades: {profitable_trades:,} ({profitable_trades/total_trades:.1%})")
+        print(f"Losing Trades: {losing_trades:,} ({losing_trades/total_trades:.1%})")
         print(f"Average Profit per Trade: {np.mean(trades):.5f}")
-        print(f"Win Rate: {profitable_trades/len(trades):.2%}")
         print(f"Profit Factor: {sum([t for t in trades if t > 0])/abs(sum([t for t in trades if t < 0])):.2f}")
-        print(f"Average Win: {np.mean([t for t in trades if t > 0]):.5f}")
-        print(f"Average Loss: {np.mean([t for t in trades if t < 0]):.5f}")
         print(f"Largest Win: {max(trades):.5f}")
         print(f"Largest Loss: {min(trades):.5f}")
+        
+        # Buy trades statistics
+        buy_trades = trades_df[trades_df['action'] == 'buy']
+        buy_profits = buy_trades['profit'].dropna()
+        buy_wins = len(buy_profits[buy_profits > 0])
+        buy_losses = len(buy_profits[buy_profits < 0])
+        
+        print("\n=== Buy Trades Statistics ===")
+        print(f"Total Buy Trades: {len(buy_trades):,}")
+        print(f"Winning Buy Trades: {buy_wins:,} ({buy_wins/len(buy_trades):.1%})")
+        print(f"Losing Buy Trades: {buy_losses:,} ({buy_losses/len(buy_trades):.1%})")
+        if len(buy_profits) > 0:
+            print(f"Average Buy Profit: {buy_profits.mean():.5f}")
+            print(f"Largest Buy Win: {buy_profits.max():.5f}")
+            print(f"Largest Buy Loss: {buy_profits.min():.5f}")
+        
+        # Sell trades statistics
+        sell_trades = trades_df[trades_df['action'] == 'sell']
+        sell_profits = sell_trades['profit'].dropna()
+        sell_wins = len(sell_profits[sell_profits > 0])
+        sell_losses = len(sell_profits[sell_profits < 0])
+        
+        print("\n=== Sell Trades Statistics ===")
+        print(f"Total Sell Trades: {len(sell_trades):,}")
+        print(f"Winning Sell Trades: {sell_wins:,} ({sell_wins/len(sell_trades):.1%})")
+        print(f"Losing Sell Trades: {sell_losses:,} ({sell_losses/len(sell_trades):.1%})")
+        if len(sell_profits) > 0:
+            print(f"Average Sell Profit: {sell_profits.mean():.5f}")
+            print(f"Largest Sell Win: {sell_profits.max():.5f}")
+            print(f"Largest Sell Loss: {sell_profits.min():.5f}")
+        
+        # Monthly statistics
+        print("\n=== Monthly Trading Statistics ===")
+        monthly_stats = []
+        for month in sorted(trades_df['month'].unique()):
+            month_trades = trades_df[trades_df['month'] == month]
+            month_profits = month_trades['profit'].dropna()
+            
+            if len(month_profits) > 0:
+                wins = len(month_profits[month_profits > 0])
+                losses = len(month_profits[month_profits < 0])
+                total = len(month_profits)
+                profit_sum = month_profits.sum()
+                win_rate = wins/total if total > 0 else 0
+                
+                monthly_stats.append({
+                    'month': month,
+                    'trades': total,
+                    'wins': wins,
+                    'losses': losses,
+                    'win_rate': win_rate,
+                    'profit': profit_sum,
+                    'avg_profit': profit_sum/total if total > 0 else 0
+                })
+        
+        # Print monthly statistics in a table format
+        print("\nMonth      Trades  Wins  Losses  Win Rate  Total Profit  Avg Profit/Trade")
+        print("-" * 75)
+        for stat in monthly_stats:
+            print(f"{stat['month']}  {stat['trades']:6d}  {stat['wins']:4d}  {stat['losses']:6d}  "
+                  f"{stat['win_rate']:7.1%}  {stat['profit']:11.2f}  {stat['avg_profit']:14.5f}")
+        
+        # Calculate best and worst months
+        if monthly_stats:
+            best_month = max(monthly_stats, key=lambda x: x['profit'])
+            worst_month = min(monthly_stats, key=lambda x: x['profit'])
+            
+            print(f"\nBest Month: {best_month['month']} (Profit: {best_month['profit']:.2f}, "
+                  f"Win Rate: {best_month['win_rate']:.1%})")
+            print(f"Worst Month: {worst_month['month']} (Profit: {worst_month['profit']:.2f}, "
+                  f"Win Rate: {worst_month['win_rate']:.1%})")
     
     # Create visualization
     print("\nGenerating visualization...")

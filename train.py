@@ -58,10 +58,10 @@ class EarlyStoppingCallback(BaseCallback):
 
 def train_forex_model():
     # Create necessary directories
-    os.makedirs("src/models", exist_ok=True)
-    os.makedirs("src/logs", exist_ok=True)
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
     os.makedirs("src/data/raw", exist_ok=True)
-    os.makedirs("src/backtest_results", exist_ok=True)
+    os.makedirs("backtest_results", exist_ok=True)
     
     # Check for CUDA availability
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -83,7 +83,7 @@ def train_forex_model():
         
     now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     name_model = "USDJPY_5M_2023_model_" + now
-    model_save_path = f"src/models/{name_model}"
+    model_save_path = f"models/{name_model}"
     
     print("Loading data...")
     forex_data = load_forex_data(data_path)
@@ -91,19 +91,19 @@ def train_forex_model():
     
     # Create and wrap the environment
     env = ForexTradingEnv(data=forex_data)
-    env = Monitor(env, "src/logs")
+    env = Monitor(env, "logs")
     env = DummyVecEnv([lambda: env])
     
     # Create evaluation environment
     eval_env = ForexTradingEnv(data=forex_data)
-    eval_env = Monitor(eval_env, "src/logs")
+    eval_env = Monitor(eval_env, "logs")
     eval_env = DummyVecEnv([lambda: eval_env])
     
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=model_save_path,
-        log_path="src/logs",
+        log_path="logs",
         eval_freq=10000,
         deterministic=True,
         render=False
@@ -128,7 +128,7 @@ def train_forex_model():
         use_sde=False,
         sde_sample_freq=-1,
         target_kl=None,
-        tensorboard_log="src/logs",
+        tensorboard_log="logs",
         verbose=1,
         device=device
     )
@@ -159,7 +159,8 @@ def train_forex_model():
         print(f"Training stopped: {str(e)}")
     
     # Save the final model
-    final_model_path = f"{model_save_path}/final_model"
+    final_model_path = f"{model_save_path}/final_model.zip"
+    os.makedirs(os.path.dirname(final_model_path), exist_ok=True)
     model.save(final_model_path)
     print(f"Training completed. Model saved to {final_model_path}")
     return final_model_path
