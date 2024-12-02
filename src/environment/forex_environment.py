@@ -7,13 +7,18 @@ class ForexTradingEnv(gym.Env):
     def __init__(self, data: pd.DataFrame):
         super(ForexTradingEnv, self).__init__()
         
-        self.data = data
+        # Make a copy of the data to avoid modifying the original
+        self.data = data.copy()
+        if 'time' in self.data.columns:
+            self.data.set_index('time', inplace=True)
+            
         self.current_step = 0
         self.initial_balance = 10000.0
         self.balance = self.initial_balance
         self.position = 0  # -1: short, 0: neutral, 1: long
         self.position_price = 0
         self.transaction_fee = 0.0001  # 0.01% per trade
+        self.rewards = []  # Track rewards for early stopping
         
         # Calculate indicators
         self.data['SMA20'] = self.data['close'].rolling(window=20).mean()
@@ -97,22 +102,37 @@ class ForexTradingEnv(gym.Env):
         current_price = self.data.iloc[self.current_step]['close']
         reward = 0
         
-        # Close position rewards
-        if self.position == 1 and action == 2:  # Close long
-            reward = ((current_price - self.position_price) / self.position_price) - self.transaction_fee
-            self.balance *= (1 + reward)
-            
-        elif self.position == -1 and action == 1:  # Close short
-            reward = ((self.position_price - current_price) / self.position_price) - self.transaction_fee
-            self.balance *= (1 + reward)
-            
         # Penalize invalid actions
-        elif (self.position == 1 and action == 1) or (self.position == -1 and action == 2):
-            reward = -0.001  # Small penalty for invalid actions
+        if (action == 1 and self.position == 1) or (action == 2 and self.position == -1):
+            return -0.1
             
-        # Add a small negative reward for holding a position to encourage closing
-        elif self.position != 0:
-            reward = -0.0001
+        # Calculate profit/loss for position changes
+        if action == 1:  # Buy
+            if self.position == -1:  # Close short position
+                profit = self.position_price - current_price
+                reward = profit * 100  # Scale up the reward
+            elif self.position == 0:  # Open long position
+                reward = 0.1  # Small positive reward for opening position
+            self.position = 1
+            self.position_price = current_price
+            
+        elif action == 2:  # Sell
+            if self.position == 1:  # Close long position
+                profit = current_price - self.position_price
+                reward = profit * 100  # Scale up the reward
+            elif self.position == 0:  # Open short position
+                reward = 0.1  # Small positive reward for opening position
+            self.position = -1
+            self.position_price = current_price
+            
+        # Add small negative reward for holding to encourage action
+        elif action == 0 and self.position != 0:  # Holding a position
+            price_change = abs(current_price - self.position_price)
+            reward = -0.01 if price_change < 0.0001 else 0
+            
+        # Update balance based on current position value
+        if self.position != 0:
+            self.balance += reward
             
         return reward
         
@@ -137,6 +157,7 @@ class ForexTradingEnv(gym.Env):
                 
         # Calculate reward
         reward = self._calculate_reward(action)
+        self.rewards.append(reward)  # Track reward
         
         # Move to next step
         self.current_step += 1
@@ -157,6 +178,7 @@ class ForexTradingEnv(gym.Env):
         self.balance = self.initial_balance
         self.position = 0
         self.position_price = 0
+        self.rewards = []  # Reset rewards
         
         return self._get_observation(), {}
         

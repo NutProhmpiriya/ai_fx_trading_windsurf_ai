@@ -1,10 +1,11 @@
 import sys
 import os
+import numpy as np
 import pandas as pd
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
 from environment.forex_environment import ForexTradingEnv
 from test import test_agent
@@ -14,6 +15,46 @@ from utils.load_data import load_forex_data
 src_dir = os.path.dirname(os.path.abspath(__file__))
 if src_dir not in sys.path:
     sys.path.append(src_dir)
+
+class EarlyStoppingCallback(BaseCallback):
+    def __init__(self, check_freq: int = 1000, patience: int = 5, min_improvement: float = 0.01, verbose: int = 1):
+        super().__init__(verbose)
+        self.check_freq = check_freq
+        self.patience = patience
+        self.min_improvement = min_improvement
+        self.best_mean_reward = -np.inf
+        self.no_improvement_count = 0
+        self.rewards_history = []
+        
+    def _on_step(self) -> bool:
+        if self.n_calls % self.check_freq == 0:
+            # Get the mean episode reward from the last 100 episodes
+            if len(self.training_env.get_attr("rewards")) > 0:
+                current_rewards = self.training_env.get_attr("rewards")[0][-100:]
+                if len(current_rewards) > 0:
+                    current_mean_reward = np.mean(current_rewards)
+                    self.rewards_history.append(current_mean_reward)
+                    
+                    # Check if there's significant improvement
+                    if current_mean_reward > self.best_mean_reward + self.min_improvement:
+                        self.best_mean_reward = current_mean_reward
+                        self.no_improvement_count = 0
+                        if self.verbose > 0:
+                            print(f"New best mean reward: {self.best_mean_reward:.3f}")
+                    else:
+                        self.no_improvement_count += 1
+                        if self.verbose > 0:
+                            print(f"No improvement for {self.no_improvement_count} checks")
+                            print(f"Current mean reward: {current_mean_reward:.3f}")
+                            print(f"Best mean reward: {self.best_mean_reward:.3f}")
+                    
+                    # Stop training if no improvement for too long
+                    if self.no_improvement_count >= self.patience:
+                        if self.verbose > 0:
+                            print("Stopping training due to no improvement")
+                        return False
+                
+        return True
 
 def train_forex_model():
     # Create necessary directories
@@ -98,12 +139,24 @@ def train_forex_model():
     print(f"Total timesteps: {total_timesteps}")
     
     print("Starting training...")
-    # Train the agent
-    model.learn(
-        total_timesteps=total_timesteps,
-        callback=eval_callback,
-        progress_bar=True
+    # Create early stopping callback
+    early_stopping_callback = EarlyStoppingCallback(
+        check_freq=2000,    # Check every 2000 steps
+        patience=10,        # Stop if no improvement for 10 checks
+        min_improvement=0.001  # Smaller improvement threshold
     )
+    
+    # Train the agent
+    try:
+        # Train the model with early stopping
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=early_stopping_callback,
+            progress_bar=True
+        )
+        print("Training completed successfully")
+    except Exception as e:
+        print(f"Training stopped: {str(e)}")
     
     # Save the final model
     final_model_path = f"{model_save_path}/final_model"
