@@ -155,19 +155,28 @@ def train_forex_model():
             progress_bar=True
         )
         print("Training completed successfully")
+        training_completed = True
     except Exception as e:
         print(f"Training stopped: {str(e)}")
+        training_completed = False
     
-    # Save the final model
-    final_model_path = f"{model_save_path}/final_model.zip"
-    os.makedirs(os.path.dirname(final_model_path), exist_ok=True)
-    model.save(final_model_path)
-    print(f"Training completed. Model saved to {final_model_path}")
-    return final_model_path
+    # Save the final model only if training completed
+    if training_completed:
+        final_model_path = f"{model_save_path}/final_model.zip"
+        os.makedirs(os.path.dirname(final_model_path), exist_ok=True)
+        model.save(final_model_path)
+        print(f"Training completed. Model saved to {final_model_path}")
+        return final_model_path, training_completed
+    else:
+        print("Training did not complete. Model will not be saved.")
+        return None, training_completed
 
 if __name__ == "__main__":
-    model_path = train_forex_model()
+    model_path, training_completed = train_forex_model()
     
-    # Run backtesting
-    print("\nStarting backtesting...")
-    test_agent(model_path=model_path)
+    # Run backtesting only if training completed successfully
+    if training_completed:
+        print("\nStarting backtesting...")
+        test_agent(model_path=model_path)
+    else:
+        print("\nSkipping backtesting due to incomplete training.")

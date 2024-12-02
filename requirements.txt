@@ -7,3 +7,4 @@ torch==2.0.1
 plotly==5.19.0
 tenacity==9.0.0
 packaging==24.2
+pandas-ta==0.3.14b
