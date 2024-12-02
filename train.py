@@ -7,7 +7,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
-from environment.forex_environment import ForexTradingEnv
+from rl_env.forex_environment import ForexTradingEnv
 from test import test_agent
 from utils.load_data import load_forex_data
 
@@ -58,9 +58,9 @@ class EarlyStoppingCallback(BaseCallback):
 
 def train_forex_model():
     # Create necessary directories
-    os.makedirs("models", exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("src/data/raw", exist_ok=True)
+    os.makedirs("rl_models", exist_ok=True)
+    os.makedirs("rl_model_logs", exist_ok=True)
+    os.makedirs("data/raw", exist_ok=True)
     os.makedirs("backtest_results", exist_ok=True)
     
     # Check for CUDA availability
@@ -75,7 +75,7 @@ def train_forex_model():
     
     # Load and preprocess data
     name_data = "USDJPY_5M_2023_data.csv"
-    data_path = 'src/data/raw/' + name_data
+    data_path = 'data/raw/' + name_data
     
     if not os.path.exists(data_path):
         print(f"Error: Data file not found at {data_path}")
@@ -83,7 +83,7 @@ def train_forex_model():
         
     now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     name_model = "USDJPY_5M_2023_model_" + now
-    model_save_path = f"models/{name_model}"
+    model_save_path = f"rl_models/{name_model}"
     
     print("Loading data...")
     forex_data = load_forex_data(data_path)
@@ -91,19 +91,19 @@ def train_forex_model():
     
     # Create and wrap the environment
     env = ForexTradingEnv(data=forex_data)
-    env = Monitor(env, "logs")
+    env = Monitor(env, "rl_model_logs")
     env = DummyVecEnv([lambda: env])
     
     # Create evaluation environment
     eval_env = ForexTradingEnv(data=forex_data)
-    eval_env = Monitor(eval_env, "logs")
+    eval_env = Monitor(eval_env, "rl_model_logs")
     eval_env = DummyVecEnv([lambda: eval_env])
     
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=model_save_path,
-        log_path="logs",
+        log_path="rl_model_logs",
         eval_freq=10000,
         deterministic=True,
         render=False
@@ -128,7 +128,7 @@ def train_forex_model():
         use_sde=False,
         sde_sample_freq=-1,
         target_kl=None,
-        tensorboard_log="logs",
+        tensorboard_log="rl_model_logs",
         verbose=1,
         device=device
     )

@@ -1,128 +1,134 @@
-import sys
 import os
+import sys
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from stable_baselines3 import PPO
-from environment.forex_environment import ForexTradingEnv
+from rl_env.forex_environment import ForexTradingEnv
 from utils.load_data import load_forex_data
 import time
+import datetime
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly
 
 # Add src directory to Python path
 src_dir = os.path.dirname(os.path.abspath(__file__))
 if src_dir not in sys.path:
     sys.path.append(src_dir)
 
-def create_backtest_visualization(df, trades_info, model_name):
-    """
-    Create interactive visualization of backtest results
-    """
-    try:
-        # Create figure with secondary y-axis
-        fig = make_subplots(
-            rows=2, 
-            cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            subplot_titles=('Price & Trades', 'Account Balance'),
-            row_heights=[0.7, 0.3]
-        )
+def create_backtest_visualization(env, test_data, trade_history, model_name):
+    # Create timestamp for the filename
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create subplots
+    fig = make_subplots(rows=3, cols=1,
+                       subplot_titles=('Price and Trades', 'Account Balance', 'Trade Positions'),
+                       row_heights=[0.5, 0.25, 0.25],
+                       vertical_spacing=0.1)
 
-        # Add price line
-        fig.add_trace(
-            go.Candlestick(
-                x=df.index,
-                open=df['open'],
-                high=df['high'],
-                low=df['low'],
-                close=df['close'],
-                name='Price'
-            ),
-            row=1, col=1
-        )
+    # Plot 1: Price movement and trade actions
+    dates = test_data.index
+    
+    # Candlestick chart
+    fig.add_trace(
+        go.Candlestick(
+            x=dates,
+            open=test_data['open'],
+            high=test_data['high'],
+            low=test_data['low'],
+            close=test_data['close'],
+            name='USDJPY'
+        ),
+        row=1, col=1
+    )
 
-        # Add buy trades
-        buy_trades = trades_info[trades_info['action'] == 'buy']
-        if not buy_trades.empty:
+    # Add buy/sell markers
+    if trade_history:
+        buy_points = [(date, price) for date, price, action in trade_history if action == 1]
+        sell_points = [(date, price) for date, price, action in trade_history if action == 2]
+        
+        if buy_points:
+            buy_dates, buy_prices = zip(*buy_points)
             fig.add_trace(
                 go.Scatter(
-                    x=buy_trades['time'],
-                    y=buy_trades['price'],
+                    x=buy_dates,
+                    y=buy_prices,
                     mode='markers',
                     name='Buy',
-                    marker=dict(
-                        size=10,
-                        color='green',
-                        symbol='triangle-up'
-                    )
+                    marker=dict(color='green', size=8, symbol='triangle-up'),
                 ),
                 row=1, col=1
             )
-
-        # Add sell trades
-        sell_trades = trades_info[trades_info['action'] == 'sell']
-        if not sell_trades.empty:
+        
+        if sell_points:
+            sell_dates, sell_prices = zip(*sell_points)
             fig.add_trace(
                 go.Scatter(
-                    x=sell_trades['time'],
-                    y=sell_trades['price'],
+                    x=sell_dates,
+                    y=sell_prices,
                     mode='markers',
                     name='Sell',
-                    marker=dict(
-                        size=10,
-                        color='red',
-                        symbol='triangle-down'
-                    )
+                    marker=dict(color='red', size=8, symbol='triangle-down'),
                 ),
                 row=1, col=1
             )
 
-        # Add balance
-        fig.add_trace(
-            go.Scatter(
-                x=trades_info['time'],
-                y=trades_info['balance'],
-                mode='lines',
-                name='Balance',
-                line=dict(color='blue')
-            ),
-            row=2, col=1
-        )
+    # Plot 2: Account Balance
+    balance_history = env.balance_history
+    fig.add_trace(
+        go.Scatter(
+            x=dates[:len(balance_history)],
+            y=balance_history,
+            name='Balance',
+            line=dict(color='blue'),
+        ),
+        row=2, col=1
+    )
 
-        # Update layout
-        fig.update_layout(
-            title=dict(
-                text=f'Backtest Results - {model_name}',
-                x=0.5,
-                xanchor='center'
-            ),
-            xaxis_title='Time',
-            yaxis_title='Price',
-            yaxis2_title='Balance',
-            height=800,
-            showlegend=True,
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            )
-        )
+    # Plot 3: Position History
+    position_history = env.position_history
+    fig.add_trace(
+        go.Scatter(
+            x=dates[:len(position_history)],
+            y=position_history,
+            name='Position',
+            line=dict(color='purple'),
+        ),
+        row=3, col=1
+    )
 
-        # Update axes
-        fig.update_xaxes(rangeslider_visible=False)
-        
-        # Save the plot
-        output_path = f"backtest_results/backtest_{model_name}.html"
-        fig.write_html(output_path)
-        
-    except Exception as e:
-        print(f"Error in visualization: {str(e)}")
-        print("trades_info shape:", trades_info.shape)
-        print("trades_info columns:", trades_info.columns)
-        print("First few rows of trades_info:")
-        print(trades_info.head())
+    # Update layout
+    fig.update_layout(
+        title=f'Backtest Results - {model_name}',
+        xaxis_rangeslider_visible=False,
+        height=1200,
+        showlegend=True
+    )
+
+    # Save the plot
+    output_file = f"backtest_results/backtest_visualization_{timestamp}.html"
+    fig.write_html(output_file)
+    
+    print(f"\nVisualization saved to: {output_file}")
+    
+    # Create summary statistics
+    total_trades = len(trade_history)
+    buy_trades = sum(1 for _, _, action in trade_history if action == 1)
+    sell_trades = sum(1 for _, _, action in trade_history if action == 2)
+    
+    initial_balance = 10000
+    final_balance = env.balance
+    profit_loss = final_balance - initial_balance
+    return_pct = (profit_loss / initial_balance) * 100
+    
+    print("\nBacktest Summary:")
+    print(f"Total Trades: {total_trades}")
+    print(f"Buy Trades: {buy_trades}")
+    print(f"Sell Trades: {sell_trades}")
+    print(f"Initial Balance: ${initial_balance:,.2f}")
+    print(f"Final Balance: ${final_balance:,.2f}")
+    print(f"Profit/Loss: ${profit_loss:,.2f}")
+    print(f"Return: {return_pct:.2f}%")
 
 def test_agent(model_path=None):
     """
@@ -135,14 +141,14 @@ def test_agent(model_path=None):
     os.makedirs("backtest_results", exist_ok=True)
     
     if model_path is None:
-        model_path = "models/USDJPY_5M_2023_model_20241202_163053/final_model.zip"
+        model_path = "rl_models/USDJPY_5M_2023_model_20241202_163053/final_model.zip"
     
     model_name = os.path.basename(os.path.dirname(model_path))
     
     # Check if model exists
     if not os.path.exists(model_path):
         # Try to find the most recent model
-        models_dir = "models"
+        models_dir = "rl_models"
         if os.path.exists(models_dir):
             model_dirs = [d for d in os.listdir(models_dir) if d.startswith("USDJPY_5M_2023_model_")]
             if model_dirs:
@@ -174,8 +180,7 @@ def test_agent(model_path=None):
     model = PPO.load(model_path, env=env)
     
     # Initialize variables for tracking trades
-    trades = []
-    trades_info = []
+    trade_history = []
     done = False
     truncated = False
     obs, _ = env.reset()  # Get only observation from reset
@@ -200,21 +205,11 @@ def test_agent(model_path=None):
         action, _states = model.predict(obs)
         obs, reward, done, truncated, info = env.step(action)  # Handle new step return format
         
-        trades_info.append({
-            'time': env.data.index[env.current_step],
-            'action': 'buy' if action == 1 else 'sell',
-            'price': env.data['close'].iloc[env.current_step],
-            'position': env.position,
-            'balance': env.balance
-        })
+        # Record trade if action is buy or sell
+        if action in [1, 2]:  # 1 for buy, 2 for sell
+            trade_history.append((test_data.index[step_count], test_data['close'].iloc[step_count], action))
         
-        if reward != 0:  # If we closed a position
-            trades.append(reward)
-            
         step_count += 1
-    
-    # Convert trades_info to DataFrame
-    trades_df = pd.DataFrame(trades_info)
     
     # Calculate trading statistics
     total_time = time.time() - start_time
@@ -223,111 +218,16 @@ def test_agent(model_path=None):
     
     # Check if all steps were completed
     if step_count < total_steps:
-        print(f"\n⚠️ WARNING: Model testing failed - Incomplete steps!")
-        print(f"Expected steps: {total_steps:,}")
-        print(f"Completed steps: {step_count:,}")
-        print(f"Missing steps: {total_steps - step_count:,}")
-        print("Test terminated due to incomplete execution.")
-        return False
+        print(f"\nWARNING: Model testing failed - Incomplete steps!")
+        print(f"Processed {step_count} steps out of {len(test_data)}")
+        return
         
     print(f"Initial Balance: 10,000.00")
     print(f"Final Balance: {env.balance:.2f}")
     print(f"Total Return: {((env.balance/10000)-1)*100:.2f}%")
     
-    if trades:
-        trades_df['profit'] = trades_df['balance'].diff()
-        trades_df['month'] = trades_df['time'].dt.strftime('%Y-%m')
-        
-        # Overall statistics
-        total_trades = len(trades)
-        profitable_trades = len([t for t in trades if t > 0])
-        losing_trades = len([t for t in trades if t < 0])
-        
-        print("\n=== Overall Trading Statistics ===")
-        print(f"Total Number of Trades: {total_trades:,}")
-        print(f"Profitable Trades: {profitable_trades:,} ({profitable_trades/total_trades:.1%})")
-        print(f"Losing Trades: {losing_trades:,} ({losing_trades/total_trades:.1%})")
-        print(f"Average Profit per Trade: {np.mean(trades):.5f}")
-        print(f"Profit Factor: {sum([t for t in trades if t > 0])/abs(sum([t for t in trades if t < 0])):.2f}")
-        print(f"Largest Win: {max(trades):.5f}")
-        print(f"Largest Loss: {min(trades):.5f}")
-        
-        # Buy trades statistics
-        buy_trades = trades_df[trades_df['action'] == 'buy']
-        buy_profits = buy_trades['profit'].dropna()
-        buy_wins = len(buy_profits[buy_profits > 0])
-        buy_losses = len(buy_profits[buy_profits < 0])
-        
-        print("\n=== Buy Trades Statistics ===")
-        print(f"Total Buy Trades: {len(buy_trades):,}")
-        print(f"Winning Buy Trades: {buy_wins:,} ({buy_wins/len(buy_trades):.1%})")
-        print(f"Losing Buy Trades: {buy_losses:,} ({buy_losses/len(buy_trades):.1%})")
-        if len(buy_profits) > 0:
-            print(f"Average Buy Profit: {buy_profits.mean():.5f}")
-            print(f"Largest Buy Win: {buy_profits.max():.5f}")
-            print(f"Largest Buy Loss: {buy_profits.min():.5f}")
-        
-        # Sell trades statistics
-        sell_trades = trades_df[trades_df['action'] == 'sell']
-        sell_profits = sell_trades['profit'].dropna()
-        sell_wins = len(sell_profits[sell_profits > 0])
-        sell_losses = len(sell_profits[sell_profits < 0])
-        
-        print("\n=== Sell Trades Statistics ===")
-        print(f"Total Sell Trades: {len(sell_trades):,}")
-        print(f"Winning Sell Trades: {sell_wins:,} ({sell_wins/len(sell_trades):.1%})")
-        print(f"Losing Sell Trades: {sell_losses:,} ({sell_losses/len(sell_trades):.1%})")
-        if len(sell_profits) > 0:
-            print(f"Average Sell Profit: {sell_profits.mean():.5f}")
-            print(f"Largest Sell Win: {sell_profits.max():.5f}")
-            print(f"Largest Sell Loss: {sell_profits.min():.5f}")
-        
-        # Monthly statistics
-        print("\n=== Monthly Trading Statistics ===")
-        monthly_stats = []
-        for month in sorted(trades_df['month'].unique()):
-            month_trades = trades_df[trades_df['month'] == month]
-            month_profits = month_trades['profit'].dropna()
-            
-            if len(month_profits) > 0:
-                wins = len(month_profits[month_profits > 0])
-                losses = len(month_profits[month_profits < 0])
-                total = len(month_profits)
-                profit_sum = month_profits.sum()
-                win_rate = wins/total if total > 0 else 0
-                
-                monthly_stats.append({
-                    'month': month,
-                    'trades': total,
-                    'wins': wins,
-                    'losses': losses,
-                    'win_rate': win_rate,
-                    'profit': profit_sum,
-                    'avg_profit': profit_sum/total if total > 0 else 0
-                })
-        
-        # Print monthly statistics in a table format
-        print("\nMonth      Trades  Wins  Losses  Win Rate  Total Profit  Avg Profit/Trade")
-        print("-" * 75)
-        for stat in monthly_stats:
-            print(f"{stat['month']}  {stat['trades']:6d}  {stat['wins']:4d}  {stat['losses']:6d}  "
-                  f"{stat['win_rate']:7.1%}  {stat['profit']:11.2f}  {stat['avg_profit']:14.5f}")
-        
-        # Calculate best and worst months
-        if monthly_stats:
-            best_month = max(monthly_stats, key=lambda x: x['profit'])
-            worst_month = min(monthly_stats, key=lambda x: x['profit'])
-            
-            print(f"\nBest Month: {best_month['month']} (Profit: {best_month['profit']:.2f}, "
-                  f"Win Rate: {best_month['win_rate']:.1%})")
-            print(f"Worst Month: {worst_month['month']} (Profit: {worst_month['profit']:.2f}, "
-                  f"Win Rate: {worst_month['win_rate']:.1%})")
-    
-    # Create visualization
-    print("\nGenerating visualization...")
-    output_path = f"backtest_results/backtest_{model_name}.html"
-    create_backtest_visualization(env.data, trades_df, model_name)
-    print(f"Visualization saved to: {output_path}")
+    # Create and save visualization
+    create_backtest_visualization(env, test_data, trade_history, model_name)
 
 if __name__ == "__main__":
     test_agent()

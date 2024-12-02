@@ -35,8 +35,6 @@ ENV/
 .pydevproject
 
 # Project specific
-models/
-logs/
 *.csv
 *.html
 *.log
@@ -92,3 +90,5 @@ coverage.xml
 Thumbs.db
 Scripts/
 share/
+rl_models/
+rl_model_logs/
