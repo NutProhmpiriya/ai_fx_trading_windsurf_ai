@@ -1,33 +1,26 @@
+import sys
+import os
+import pandas as pd
+import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
-import os
-import pandas as pd
 from environment.forex_environment import ForexTradingEnv
-import torch
+from test import test_agent
+from utils.load_data import load_forex_data
 
-def load_forex_data(data_path: str) -> pd.DataFrame:
-    """
-    Load and preprocess forex data
-    """
-    # Read CSV file
-    df = pd.read_csv(data_path)
-    
-    # Convert time column to datetime
-    df['time'] = pd.to_datetime(df['time'])
-    
-    # Add volume if not present (common in Forex data)
-    if 'volume' not in df.columns:
-        df['volume'] = 1.0
-    
-    return df
+# Add src directory to Python path
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
 
 def train_forex_model():
     # Create necessary directories
     os.makedirs("src/models", exist_ok=True)
     os.makedirs("src/logs", exist_ok=True)
     os.makedirs("src/data/raw", exist_ok=True)
+    os.makedirs("src/backtest_results", exist_ok=True)
     
     # Check for CUDA availability
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -49,7 +42,11 @@ def train_forex_model():
         
     now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     name_model = "USDJPY_5M_2023_model_" + now
+    model_save_path = f"src/models/{name_model}"
+    
+    print("Loading data...")
     forex_data = load_forex_data(data_path)
+    print(f"Data loaded. Shape: {forex_data.shape}")
     
     # Create and wrap the environment
     env = ForexTradingEnv(data=forex_data)
@@ -64,13 +61,14 @@ def train_forex_model():
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=f"src/models/{name_model}",
+        best_model_save_path=model_save_path,
         log_path="src/logs",
         eval_freq=10000,
         deterministic=True,
         render=False
     )
     
+    print("Creating model...")
     # Initialize the agent with GPU support
     model = PPO(
         "MlpPolicy",
@@ -91,14 +89,15 @@ def train_forex_model():
         target_kl=None,
         tensorboard_log="src/logs",
         verbose=1,
-        device=device  # Set device for training
+        device=device
     )
     
     num_bars = len(forex_data)
     print(f"Number of bars: {num_bars}")
-    total_timesteps = num_bars
+    total_timesteps = num_bars 
     print(f"Total timesteps: {total_timesteps}")
     
+    print("Starting training...")
     # Train the agent
     model.learn(
         total_timesteps=total_timesteps,
@@ -107,8 +106,14 @@ def train_forex_model():
     )
     
     # Save the final model
-    model.save(f"src/models/{name_model}")
-    print(f"Training completed. Model saved to models/{name_model}")
+    final_model_path = f"{model_save_path}/final_model"
+    model.save(final_model_path)
+    print(f"Training completed. Model saved to {final_model_path}")
+    return final_model_path
 
 if __name__ == "__main__":
-    train_forex_model()
+    model_path = train_forex_model()
+    
+    # Run backtesting
+    print("\nStarting backtesting...")
+    test_agent(model_path=model_path)

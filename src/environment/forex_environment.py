@@ -26,7 +26,7 @@ class ForexTradingEnv(gym.Env):
         # Observation space: [position, normalized_price, normalized_volume, normalized_sma20, normalized_sma50, normalized_rsi]
         self.observation_space = spaces.Box(
             low=np.array([-1, 0, 0, 0, 0, 0], dtype=np.float32),
-            high=np.array([1, np.inf, np.inf, np.inf, np.inf, 100], dtype=np.float32)
+            high=np.array([1, np.inf, np.inf, np.inf, np.inf, 1], dtype=np.float32)
         )
         
     def _calculate_rsi(self, prices, periods=14):
@@ -55,16 +55,43 @@ class ForexTradingEnv(gym.Env):
         return rsi
         
     def _get_observation(self):
-        obs = np.array([
-            self.position,  # Current position
-            self.data.iloc[self.current_step]['close'] / self.data.iloc[0]['close'],  # Normalized price
-            self.data.iloc[self.current_step]['volume'] / self.data.iloc[0]['volume'],  # Normalized volume
-            self.data.iloc[self.current_step]['SMA20'] / self.data.iloc[0]['close'],  # Normalized SMA20
-            self.data.iloc[self.current_step]['SMA50'] / self.data.iloc[0]['close'],  # Normalized SMA50
-            self.data.iloc[self.current_step]['RSI']  # RSI (already between 0 and 100)
-        ], dtype=np.float32)
+        """
+        Get current observation
+        Returns normalized values of:
+        - Current position
+        - Price
+        - Volume (or 1.0 if not available)
+        - Technical indicators
+        """
+        current_price = self.data.iloc[self.current_step]['close']
         
-        return obs
+        # Calculate technical indicators
+        window_20 = self.data.iloc[max(0, self.current_step-19):self.current_step+1]['close']
+        window_50 = self.data.iloc[max(0, self.current_step-49):self.current_step+1]['close']
+        
+        sma_20 = window_20.mean()
+        sma_50 = window_50.mean()
+        
+        # Calculate RSI
+        delta = self.data.iloc[max(0, self.current_step-14):self.current_step+1]['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs.iloc[-1]))
+        
+        # Use volume if available, otherwise use 1.0
+        volume = 1.0
+        if 'volume' in self.data.columns:
+            volume = self.data.iloc[self.current_step]['volume'] / self.data.iloc[0]['volume']
+        
+        return np.array([
+            self.position,  # Current position (-1: short, 0: neutral, 1: long)
+            current_price / self.data.iloc[0]['close'],  # Normalized price
+            volume,  # Normalized volume or 1.0
+            sma_20 / self.data.iloc[0]['close'],  # Normalized SMA20
+            sma_50 / self.data.iloc[0]['close'],  # Normalized SMA50
+            rsi / 100.0  # Normalized RSI
+        ], dtype=np.float32)
         
     def _calculate_reward(self, action):
         current_price = self.data.iloc[self.current_step]['close']

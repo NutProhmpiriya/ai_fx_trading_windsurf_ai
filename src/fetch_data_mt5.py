@@ -78,7 +78,7 @@ def main():
         # "GBPUSD", 
         "USDJPY"
     ]
-    year = 2023
+    year = 2024
     timeframe = mt5.TIMEFRAME_M5  # 1-hour timeframe
     
     for symbol in symbols:

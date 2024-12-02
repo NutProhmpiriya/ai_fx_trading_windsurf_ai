@@ -1,11 +1,17 @@
-from stable_baselines3 import PPO
-from environment.forex_environment import ForexTradingEnv
+import sys
+import os
 import pandas as pd
-from train import load_forex_data
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import os
+from stable_baselines3 import PPO
+from environment.forex_environment import ForexTradingEnv
+from utils.load_data import load_forex_data
+
+# Add src directory to Python path
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
 
 def create_backtest_visualization(df, trades_info, name_model):
     """
@@ -102,17 +108,19 @@ def create_backtest_visualization(df, trades_info, name_model):
     # Show the chart
     fig.show()
 
-def test_agent():
+def test_agent(model_path=None):
     # Create directories if they don't exist
     os.makedirs("src/models", exist_ok=True)
     os.makedirs("src/backtest_results", exist_ok=True)
     
-    model_path = "src/models/USDJPY_5M_2023_model_20241202_020332.zip"
-    name_model = model_path.split('/')[-1].replace('.zip', '')
+    if model_path is None:
+        model_path = "src/models/USDJPY_5M_2023_model_20241202_020332.zip"
+    
+    name_model = os.path.basename(model_path).replace('.zip', '')
     
     # Check if model exists
-    if not os.path.exists(model_path):
-        print(f"Error: Model not found at {model_path}")
+    if not os.path.exists(model_path + ".zip"):
+        print(f"Error: Model not found at {model_path}.zip")
         return
     
     # Load the same data used for training
@@ -150,7 +158,6 @@ def test_agent():
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, done, _, info = env.step(action)
             total_reward += reward
-            
             # Log trading information
             if info['position'] != 0:  # If we have an open position
                 print(f"Step: {env.current_step}")
@@ -191,4 +198,4 @@ def test_agent():
         print(f"Error during testing: {str(e)}")
 
 if __name__ == "__main__":
-    test_agent()
+    test_agent('src/models/USDJPY_5M_2023_model_20241202_124320/final_model')
