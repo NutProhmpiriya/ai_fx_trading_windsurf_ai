@@ -96,6 +96,63 @@ def format_summary(summary_dict):
         </tr>
     </table>
 
+    <h3>Risk Metrics</h3>
+    <table class="stats-table">
+        <tr>
+            <td><strong>Sharpe Ratio:</strong></td>
+            <td>{summary_dict['risk_metrics']['sharpe_ratio']:.2f}</td>
+            <td><strong>Risk/Reward Ratio:</strong></td>
+            <td>{summary_dict['risk_metrics']['risk_reward_ratio']:.2f}</td>
+        </tr>
+        <tr>
+            <td><strong>Max Consecutive Wins:</strong></td>
+            <td>{summary_dict['risk_metrics']['max_consecutive_wins']}</td>
+            <td><strong>Max Consecutive Losses:</strong></td>
+            <td>{summary_dict['risk_metrics']['max_consecutive_losses']}</td>
+        </tr>
+        <tr>
+            <td><strong>Average Win Size:</strong></td>
+            <td>${summary_dict['risk_metrics']['avg_win_size']:.2f}</td>
+            <td><strong>Average Loss Size:</strong></td>
+            <td>${summary_dict['risk_metrics']['avg_loss_size']:.2f}</td>
+        </tr>
+        <tr>
+            <td><strong>Average Holding Time:</strong></td>
+            <td colspan="3">{summary_dict['risk_metrics']['avg_holding_time']}</td>
+        </tr>
+    </table>
+
+    <h3>Trading Patterns</h3>
+    <div class="pattern-tables">
+        <div class="pattern-table">
+            <h4>Performance by Hour</h4>
+            <table class="stats-table">
+                <tr>
+                    <th>Hour</th>
+                    <th>Trades</th>
+                    <th>Win Rate</th>
+                    <th>Avg Profit</th>
+                    <th>Total Profit</th>
+                </tr>
+                {generate_hourly_rows(summary_dict['pattern_analysis']['hourly_stats'])}
+            </table>
+        </div>
+        
+        <div class="pattern-table">
+            <h4>Performance by Day</h4>
+            <table class="stats-table">
+                <tr>
+                    <th>Day</th>
+                    <th>Trades</th>
+                    <th>Win Rate</th>
+                    <th>Avg Profit</th>
+                    <th>Total Profit</th>
+                </tr>
+                {generate_daily_rows(summary_dict['pattern_analysis']['daily_stats'])}
+            </table>
+        </div>
+    </div>
+
     <h3>Monthly Performance</h3>
     <table class="stats-table">
         <tr>
@@ -123,6 +180,36 @@ def format_summary(summary_dict):
     
     overall_stats += "</table>"
     return overall_stats
+
+def generate_hourly_rows(hourly_stats):
+    """Generate HTML rows for hourly statistics"""
+    rows = ""
+    for hour, stats in hourly_stats.iterrows():
+        rows += f"""
+        <tr>
+            <td>{hour:02d}:00</td>
+            <td>{stats['trades_count']}</td>
+            <td>{stats['win_rate']:.2f}%</td>
+            <td>${stats['avg_profit']:.6f}</td>
+            <td>${stats['total_profit']:.2f}</td>
+        </tr>
+        """
+    return rows
+
+def generate_daily_rows(daily_stats):
+    """Generate HTML rows for daily statistics"""
+    rows = ""
+    for day, stats in daily_stats.iterrows():
+        rows += f"""
+        <tr>
+            <td>{day}</td>
+            <td>{stats['trades_count']}</td>
+            <td>{stats['win_rate']:.2f}%</td>
+            <td>${stats['avg_profit']:.6f}</td>
+            <td>${stats['total_profit']:.2f}</td>
+        </tr>
+        """
+    return rows
 
 def main():
     if len(sys.argv) < 3:
@@ -178,6 +265,23 @@ def main():
             .stats-table th {{
                 background-color: #4CAF50;
                 color: white;
+            }}
+            .pattern-tables {{
+                display: flex;
+                justify-content: space-between;
+                gap: 20px;
+                margin: 20px 0;
+            }}
+            .pattern-table {{
+                flex: 1;
+            }}
+            h3 {{
+                color: #2C3E50;
+                margin-top: 30px;
+            }}
+            h4 {{
+                color: #34495E;
+                margin-bottom: 10px;
             }}
         </style>
     </head>

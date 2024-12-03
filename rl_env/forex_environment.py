@@ -195,6 +195,37 @@ class ForexTradingEnv(gym.Env):
             self.last_trade_day = current_day
             return self._get_observation(), -1, False, False, {'message': 'Daily loss limit exceeded - Starting new day'}
         
+        # Check if it's Friday and near market close (after 21:00 UTC)
+        if current_time.weekday() == 4 and current_time.hour >= 21 and self.position != 0:  # 4 = Friday
+            # Calculate profit/loss for closing position
+            if self.position == 1:  # Close long position
+                trade_profit = (current_price - self.position_price) * self.leverage
+            else:  # Close short position
+                trade_profit = (self.position_price - current_price) * self.leverage
+            
+            # Update stats and close position
+            self._update_trade_stats(trade_profit)
+            self.balance += trade_profit
+            self.daily_profit_loss += trade_profit
+            self.position = 0
+            self.position_price = 0
+            info = {
+                'message': 'Position closed for weekend (Friday market close)',
+                'trade_executed': True,
+                'trade_info': {
+                    'action': 'weekend_close',
+                    'price': current_price,
+                    'pnl': trade_profit,
+                    'balance': self.balance,
+                    'timestamp': current_time
+                }
+            }
+            return self._get_observation(), 0, False, False, info
+            
+        # Skip trading on weekends
+        if current_time.weekday() >= 5:  # Saturday = 5, Sunday = 6
+            return self._get_observation(), 0, False, False, {'message': 'Market closed (Weekend)'}
+            
         # Execute action with leverage
         reward = 0
         trade_profit = 0

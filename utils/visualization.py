@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import itertools
 
 def calculate_monthly_stats(trades_df):
     """Calculate monthly trading statistics"""
@@ -51,12 +52,73 @@ def calculate_drawdown(trades_df):
     drawdown = (cumulative - rolling_max) / (rolling_max.abs() + 1e-9) * 100
     return drawdown
 
-def analyze_trade_history(trades_file, price_file=None):
+def calculate_risk_metrics(trades_df):
+    """Calculate risk and performance metrics"""
+    # Calculate returns
+    returns = trades_df['pnl'].values
+    
+    # Sharpe Ratio (assuming risk-free rate = 0)
+    returns_mean = np.mean(returns)
+    returns_std = np.std(returns)
+    sharpe_ratio = np.sqrt(252) * returns_mean / returns_std if returns_std != 0 else 0
+    
+    # Calculate consecutive wins/losses
+    trade_results = (trades_df['pnl'] > 0).astype(int)
+    cons_wins = max(len(list(group)) for key, group in itertools.groupby(trade_results) if key == 1)
+    cons_losses = max(len(list(group)) for key, group in itertools.groupby(trade_results) if key == 0)
+    
+    # Calculate average holding time
+    trades_df['holding_time'] = pd.to_datetime(trades_df['exit_time']) - pd.to_datetime(trades_df['entry_time'])
+    avg_holding_time = trades_df['holding_time'].mean()
+    
+    # Calculate win/loss sizes
+    avg_win = trades_df[trades_df['pnl'] > 0]['pnl'].mean()
+    avg_loss = abs(trades_df[trades_df['pnl'] < 0]['pnl'].mean())
+    risk_reward_ratio = avg_win / avg_loss if avg_loss != 0 else 0
+    
+    return {
+        'sharpe_ratio': sharpe_ratio,
+        'risk_reward_ratio': risk_reward_ratio,
+        'max_consecutive_wins': cons_wins,
+        'max_consecutive_losses': cons_losses,
+        'avg_holding_time': avg_holding_time,
+        'avg_win_size': avg_win,
+        'avg_loss_size': avg_loss
+    }
+
+def analyze_trade_patterns(trades_df):
+    """Analyze trading patterns by time"""
+    # Add hour and day columns
+    trades_df['hour'] = pd.to_datetime(trades_df['entry_time']).dt.hour
+    trades_df['day_of_week'] = pd.to_datetime(trades_df['entry_time']).dt.day_name()
+    
+    # Hourly analysis
+    hourly_stats = trades_df.groupby('hour').agg({
+        'pnl': ['count', 'mean', 'sum'],
+        'trade_result': lambda x: (x == 'win').mean() * 100
+    })
+    hourly_stats.columns = ['trades_count', 'avg_profit', 'total_profit', 'win_rate']
+    
+    # Daily analysis
+    daily_stats = trades_df.groupby('day_of_week').agg({
+        'pnl': ['count', 'mean', 'sum'],
+        'trade_result': lambda x: (x == 'win').mean() * 100
+    })
+    daily_stats.columns = ['trades_count', 'avg_profit', 'total_profit', 'win_rate']
+    
+    return {
+        'hourly_stats': hourly_stats,
+        'daily_stats': daily_stats
+    }
+
+def analyze_trade_history(trades_df, price_file=None):
     """
     Create interactive visualization of trade history with candlestick chart
     """
-    # Load trade history
-    trades_df = pd.read_csv(trades_file)
+    # Ensure trades_df is a DataFrame
+    if not isinstance(trades_df, pd.DataFrame):
+        raise TypeError("trades_df must be a pandas DataFrame")
+        
     print("Columns in trades_df:", trades_df.columns.tolist())
     trades_df['entry_time'] = pd.to_datetime(trades_df['entry_time'])
     trades_df['exit_time'] = pd.to_datetime(trades_df['exit_time'])
@@ -361,19 +423,25 @@ def analyze_trade_history(trades_file, price_file=None):
         col=1
     )
 
+    # Calculate additional metrics
+    risk_metrics = calculate_risk_metrics(trades_df)
+    pattern_analysis = analyze_trade_patterns(trades_df)
+    
     # Calculate trade summary
     summary = {
         'total_trades': len(trades_df),
         'profitable_trades': len(trades_df[trades_df['pnl'] > 0]),
-        'losing_trades': len(trades_df[trades_df['pnl'] <= 0]),
+        'losing_trades': len(trades_df[trades_df['pnl'] < 0]),
         'total_profit': trades_df[trades_df['pnl'] > 0]['pnl'].sum(),
-        'total_loss': abs(trades_df[trades_df['pnl'] <= 0]['pnl'].sum()),
+        'total_loss': abs(trades_df[trades_df['pnl'] < 0]['pnl'].sum()),
         'net_profit': trades_df['pnl'].sum(),
         'win_rate': len(trades_df[trades_df['pnl'] > 0]) / len(trades_df) * 100,
         'avg_profit_per_trade': trades_df[trades_df['pnl'] > 0]['pnl'].mean(),
-        'avg_loss_per_trade': trades_df[trades_df['pnl'] <= 0]['pnl'].mean(),
+        'avg_loss_per_trade': trades_df[trades_df['pnl'] < 0]['pnl'].mean(),
         'max_drawdown': drawdown.min(),
-        'monthly_stats': monthly_stats
+        'monthly_stats': monthly_stats,
+        'risk_metrics': risk_metrics,
+        'pattern_analysis': pattern_analysis
     }
     
     return [fig1, fig2], summary
@@ -396,3 +464,20 @@ def print_trade_summary(summary):
     print("\nMonthly Performance Summary:")
     print("-" * 40)
     print(summary['monthly_stats'].to_string())
+    
+    print("\nRisk Metrics:")
+    print("-" * 40)
+    print(f"Sharpe Ratio: {summary['risk_metrics']['sharpe_ratio']:.2f}")
+    print(f"Risk/Reward Ratio: {summary['risk_metrics']['risk_reward_ratio']:.2f}")
+    print(f"Max Consecutive Wins: {summary['risk_metrics']['max_consecutive_wins']}")
+    print(f"Max Consecutive Losses: {summary['risk_metrics']['max_consecutive_losses']}")
+    print(f"Average Holding Time: {summary['risk_metrics']['avg_holding_time']}")
+    print(f"Average Win Size: ${summary['risk_metrics']['avg_win_size']:.2f}")
+    print(f"Average Loss Size: ${summary['risk_metrics']['avg_loss_size']:.2f}")
+    
+    print("\nTrade Pattern Analysis:")
+    print("-" * 40)
+    print("Hourly Statistics:")
+    print(summary['pattern_analysis']['hourly_stats'].to_string())
+    print("\nDaily Statistics:")
+    print(summary['pattern_analysis']['daily_stats'].to_string())

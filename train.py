@@ -192,5 +192,3 @@ def train_forex_model():
 
 if __name__ == "__main__":
     model_path, training_completed = train_forex_model()
-
-        
