@@ -60,53 +60,28 @@ def find_most_similar_price_file(trades_filename):
     return best_match if highest_ratio > 0.3 else None  # ต้องมีความคล้ายกันอย่างน้อย 30%
 
 def main():
-    """
-    วิเคราะห์ประวัติการเทรดจากไฟล์ CSV
-    สามารถใช้งานได้ 2 แบบ:
-    1. ระบุไฟล์ CSV โดยตรง: python analyze_trades.py path/to/trades.csv [path/to/price_data.csv]
-    2. ไม่ระบุไฟล์: จะวิเคราะห์ไฟล์ CSV ล่าสุดในโฟลเดอร์ปัจจุบันหรือใน data/raw
-    """
-    # หาไฟล์ trades
-    if len(sys.argv) > 1:
-        trades_csv_path = sys.argv[1]
-    else:
-        trades_csv_path = find_latest_file('trades_*.csv')
-        if not trades_csv_path:
-            print("Error: No trade history CSV files found in current directory or data/raw")
-            return
-    
-    # หาไฟล์ราคา
-    price_data_path = None
-    if len(sys.argv) > 2:
-        price_data_path = sys.argv[2]
-    else:
-        # ค้นหาไฟล์ price data ที่มีชื่อคล้ายกันที่สุดใน data/raw
-        price_data_path = find_most_similar_price_file(trades_csv_path)
-    
+    if len(sys.argv) != 3:
+        print("Usage: python analyze_trades.py <trades_csv_path> <price_data_path>")
+        sys.exit(1)
+
+    trades_csv_path = sys.argv[1]
+    price_data_path = sys.argv[2]
+
     print(f"Analyzing trade history from: {trades_csv_path}")
-    if price_data_path:
-        print(f"Using price data from: {price_data_path}")
-    else:
-        print("No matching price data file found in data/raw. Will generate analysis without price chart.")
-    
-    # วิเคราะห์ประวัติการเทรด
+    print(f"Using price data from: {price_data_path}")
+
     figs, summary = analyze_trade_history(trades_csv_path, price_data_path)
-    
-    # แสดงสรุปสถิติ
+    print("\nOverall Trading Performance Summary:")
+    print("----------------------------------------")
     print_trade_summary(summary)
-    
-    # บันทึกแผนภูมิวิเคราะห์
-    base_name = os.path.splitext(os.path.basename(trades_csv_path))[0]
-    
-    # Save price chart
-    price_chart_file = f"trade_analysis_price_{base_name}.html"
-    figs[0].write_html(price_chart_file)
-    print(f"\nPrice chart saved to: {price_chart_file}")
-    
-    # Save P&L chart
-    pnl_chart_file = f"trade_analysis_pnl_{base_name}.html"
-    figs[1].write_html(pnl_chart_file)
-    print(f"P&L chart saved to: {pnl_chart_file}")
+
+    # Save the charts
+    base_filename = os.path.splitext(os.path.basename(trades_csv_path))[0]
+    figs[0].write_html(f"trade_analysis_price_{base_filename}.html")
+    figs[1].write_html(f"trade_analysis_pnl_{base_filename}.html")
+
+    print(f"\nPrice chart saved to: trade_analysis_price_{base_filename}.html")
+    print(f"P&L chart saved to: trade_analysis_pnl_{base_filename}.html")
 
 if __name__ == "__main__":
     main()
