@@ -114,15 +114,15 @@ def train_forex_model():
     model = PPO(
         "MlpPolicy",
         env,
-        learning_rate=3e-4,
+        learning_rate=1e-3,  
         n_steps=2048,
-        batch_size=64,
+        batch_size=128,      
         n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
+        gamma=0.995,         
+        gae_lambda=0.98,     
         clip_range=0.2,
         clip_range_vf=None,
-        ent_coef=0.01,
+        ent_coef=0.02,      
         vf_coef=0.5,
         max_grad_norm=0.5,
         use_sde=False,
@@ -141,9 +141,9 @@ def train_forex_model():
     print("Starting training...")
     # Create early stopping callback
     early_stopping_callback = EarlyStoppingCallback(
-        check_freq=2000,    # Check every 2000 steps
-        patience=10,        # Stop if no improvement for 10 checks
-        min_improvement=0.001  # Smaller improvement threshold
+        check_freq=5000,     
+        patience=20,         
+        min_improvement=0.0005  
     )
     
     # Train the agent
@@ -156,27 +156,41 @@ def train_forex_model():
         )
         print("Training completed successfully")
         training_completed = True
-    except Exception as e:
-        print(f"Training stopped: {str(e)}")
+    except KeyboardInterrupt:  # Handle manual interruption
+        print("Training manually interrupted")
         training_completed = False
+    except StopTrainingException:  # Handle early stopping
+        print("Training completed early due to early stopping")
+        training_completed = True
+    except Exception as e:
+        print(f"Training stopped due to error: {str(e)}")
+        if "Stopping training due to no improvement" in str(e):
+            print("This was due to early stopping - saving model")
+            training_completed = True
+        else:
+            training_completed = False
     
-    # Save the final model only if training completed
+    # Save the final model only if training completed or early stopped
     if training_completed:
-        final_model_path = f"{model_save_path}/final_model.zip"
-        os.makedirs(os.path.dirname(final_model_path), exist_ok=True)
-        model.save(final_model_path)
-        print(f"Training completed. Model saved to {final_model_path}")
-        return final_model_path, training_completed
+        try:
+            final_model_path = f"{model_save_path}/final_model.zip"
+            os.makedirs(os.path.dirname(final_model_path), exist_ok=True)
+            model.save(final_model_path)
+            print(f"Model saved to {final_model_path}")
+            
+            # Start backtesting immediately after saving
+            print("\nStarting backtesting...")
+            test_agent(model_path=final_model_path)
+            
+            return final_model_path, training_completed
+        except Exception as e:
+            print(f"Error saving model or running backtest: {str(e)}")
+            return None, False
     else:
         print("Training did not complete. Model will not be saved.")
         return None, training_completed
 
 if __name__ == "__main__":
     model_path, training_completed = train_forex_model()
-    
-    # Run backtesting only if training completed successfully
-    if training_completed:
-        print("\nStarting backtesting...")
-        test_agent(model_path=model_path)
-    else:
-        print("\nSkipping backtesting due to incomplete training.")
+
+        
