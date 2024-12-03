@@ -37,6 +37,11 @@ def calculate_monthly_stats(trades_df):
     monthly_stats['win_rate'] = (monthly_stats['winning_trades'] / monthly_stats['total_trades'] * 100)
     monthly_stats['avg_profit_per_trade'] = monthly_stats['net_profit'] / monthly_stats['total_trades']
 
+    # Calculate cumulative account balance for each month
+    trades_df['cumulative_balance'] = 10000 + trades_df['pnl'].cumsum()  # Starting balance $10,000
+    monthly_balance = trades_df.groupby('month')['cumulative_balance'].last()
+    monthly_stats['balance'] = monthly_balance  # Add account balance
+
     return monthly_stats, buy_monthly, sell_monthly
 
 def calculate_drawdown(trades_df):
