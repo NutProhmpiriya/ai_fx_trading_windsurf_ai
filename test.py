@@ -6,7 +6,7 @@ from stable_baselines3 import PPO
 from rl_env.forex_environment import ForexTradingEnv
 from utils.load_data import load_forex_data
 import plotly
-from utils.visualization import create_backtest_visualization
+from utils.visualization import create_backtest_visualization, create_backtest_charts
 from tqdm import tqdm
 
 # Add src directory to Python path
@@ -182,6 +182,12 @@ def test_agent(model_path=None):
     # Create visualization
     print("\nGenerating visualization...", flush=True)
     fig, stats = create_backtest_visualization(test_data, trade_history, model_name)
+    
+    # Create and save analysis charts
+    print("\nGenerating analysis charts...", flush=True)
+    analysis_fig = create_backtest_charts(trades_df, test_data)
+    analysis_fig.write_html(f"backtest_analysis_{timestamp}.html")
+    print(f"Analysis charts saved to backtest_analysis_{timestamp}.html", flush=True)
     
     # Print statistics
     print("\nBacktest Statistics:", flush=True)

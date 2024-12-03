@@ -35,7 +35,6 @@ ENV/
 .pydevproject
 
 # Project specific
-*.csv
 *.html
 *.log
 .env
@@ -49,8 +48,10 @@ Include
 
 # MT5 specific
 *.dat
-*.hst
-*.txt.gz
+
+# Track data folder
+!data/
+!data/**/*.csv
 
 # Jupyter Notebook
 .ipynb_checkpoints
